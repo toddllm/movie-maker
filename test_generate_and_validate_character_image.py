@@ -7,6 +7,7 @@ from character_descriptions import CHARACTER_DESCRIPTIONS
 import argparse
 from pydantic import BaseModel
 from typing import Optional
+import shutil
 
 load_dotenv()
 client = OpenAI()
@@ -88,13 +89,32 @@ def edit_image(image_path, edit_prompt, out_path):
             f.write(image_bytes)
         print(f"Saved edited image to {out_path}")
 
+def iterative_generate_and_validate(character_name, max_generations=5, max_edits=1):
+    canonical_path = f"character_refs/{character_name.replace(' ', '_').lower()}.png"
+    for i in range(max_generations):
+        out_file = f"character_refs/{character_name.replace(' ', '_').lower()}_try{i+1}.png"
+        generate_reference_image(character_name, out_file)
+        edit_prompt = vision_check_and_edit_prompt(out_file, character_name)
+        if not edit_prompt:
+            print(f"Valid image found: {out_file}")
+            shutil.copyfile(out_file, canonical_path)
+            print(f"Canonical image saved as: {canonical_path}")
+            return canonical_path
+        for j in range(max_edits):
+            edited_out_file = out_file.replace(".png", f"_edited{j+1}.png")
+            edit_image(out_file, edit_prompt, edited_out_file)
+            edit_prompt = vision_check_and_edit_prompt(edited_out_file, character_name)
+            if not edit_prompt:
+                print(f"Valid image found: {edited_out_file}")
+                shutil.copyfile(edited_out_file, canonical_path)
+                print(f"Canonical image saved as: {canonical_path}")
+                return canonical_path
+        # If edit didn't work, continue to next generation
+    print("No valid image found after all attempts.")
+    return None
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate and validate a character reference image.")
+    parser = argparse.ArgumentParser(description="Generate and validate a character reference image (iterative loop).")
     parser.add_argument("character", type=str, help="Name of the character (must match key in CHARACTER_DESCRIPTIONS)")
     args = parser.parse_args()
-    out_file = f"character_refs/{args.character.replace(' ', '_').lower()}.png"
-    generate_reference_image(args.character, out_file)
-    edit_prompt = vision_check_and_edit_prompt(out_file, args.character)
-    if edit_prompt:
-        edited_out_file = out_file.replace(".png", "_edited.png")
-        edit_image(out_file, edit_prompt, edited_out_file) 
+    iterative_generate_and_validate(args.character) 
