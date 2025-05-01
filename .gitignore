@@ -44,4 +44,7 @@ output/
 
 # Local development
 .env
-.env.local 
+.env.local
+
+# Exceptions
+!committed_refs/*.png 
